@@ -1,22 +1,31 @@
+# Kept quiet on purpose: one grouped PR per ecosystem, once a month.
+# Security alerts still arrive immediately (Dependabot security updates ignore this schedule).
 version: 2
 updates:
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      actions:
-        patterns: ["*"]
-
   - package-ecosystem: gomod
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
     groups:
       go:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
         patterns: ["*"]
 
   - package-ecosystem: docker
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
+    ignore:
+      # Go minor releases are bumped by hand together with go.mod.
+      - dependency-name: golang
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
