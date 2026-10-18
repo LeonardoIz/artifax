@@ -1,0 +1,31 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{with .Title}}{{.}} · {{end}}artifax</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <a class="brand" href="/">artifax</a>
+  <nav>
+  {{- if .Admin}}
+    <a href="/admin"{{if eq .Section "docs"}} aria-current="page"{{end}}>Panel</a>
+    <a href="/admin/tokens"{{if eq .Section "tokens"}} aria-current="page"{{end}}>Tokens</a>
+    <form method="post" action="/auth/logout"><button type="submit" class="link">Log out</button></form>
+  {{- else if .AuthEnabled}}
+    <a href="/auth/login">Log in</a>
+  {{- end}}
+  </nav>
+</header>
+<main>
+{{- with .Flash}}<p class="flash" role="status">{{.}}</p>{{end}}
+{{- with .Error}}<p class="flash flash-error" role="alert">{{.}}</p>{{end}}
+{{template "content" .}}
+</main>
+</body>
+</html>
+{{end}}

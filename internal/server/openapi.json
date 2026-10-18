@@ -1,0 +1,208 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Artifax API",
+    "version": "1",
+    "description": "Publish self-contained HTML documents. Every document gets a random id and is served at /d/{id}. Re-uploading to the same id replaces the content and keeps the URL."
+  },
+  "servers": [{ "url": "{{BASE_URL}}" }],
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/api/docs": {
+      "post": {
+        "summary": "Create a document",
+        "description": "Send multipart/form-data with a `file` field, or a raw HTML body (Content-Type: text/html) with metadata as query parameters. Visibility defaults to private; the title defaults to the document's <title>.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TitleQuery" },
+          { "$ref": "#/components/parameters/DescriptionQuery" },
+          { "$ref": "#/components/parameters/VisibilityQuery" },
+          { "$ref": "#/components/parameters/FilenameQuery" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/Upload" },
+        "responses": {
+          "201": { "description": "Created", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Doc" } } } },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "get": {
+        "summary": "List documents",
+        "description": "Most recently updated first. Includes every visibility.",
+        "parameters": [
+          { "name": "q", "in": "query", "description": "Search title, description or exact id.", "schema": { "type": "string" } },
+          { "name": "visibility", "in": "query", "schema": { "$ref": "#/components/schemas/Visibility" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } },
+          { "name": "cursor", "in": "query", "description": "nextCursor from the previous page.", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items", "nextCursor"],
+                  "properties": {
+                    "items": { "type": "array", "items": { "$ref": "#/components/schemas/Doc" } },
+                    "nextCursor": { "type": ["string", "null"] }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/api/docs/{id}": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "summary": "Get document metadata",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Doc" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "put": {
+        "summary": "Replace document content",
+        "description": "Same body formats as create. The id and URL stay the same. Metadata fields are optional; omitted ones keep their value.",
+        "parameters": [
+          { "$ref": "#/components/parameters/TitleQuery" },
+          { "$ref": "#/components/parameters/DescriptionQuery" },
+          { "$ref": "#/components/parameters/VisibilityQuery" },
+          { "$ref": "#/components/parameters/FilenameQuery" }
+        ],
+        "requestBody": { "$ref": "#/components/requestBodies/Upload" },
+        "responses": {
+          "200": { "description": "Replaced", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Doc" } } } },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" },
+          "413": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "patch": {
+        "summary": "Update metadata",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "title": { "type": "string", "maxLength": 200 },
+                  "description": { "type": "string", "maxLength": 1000 },
+                  "visibility": { "$ref": "#/components/schemas/Visibility" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Updated", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Doc" } } } },
+          "400": { "$ref": "#/components/responses/Problem" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "delete": {
+        "summary": "Delete permanently",
+        "responses": {
+          "204": { "description": "Deleted" },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/api/docs/{id}/raw": {
+      "parameters": [{ "$ref": "#/components/parameters/Id" }],
+      "get": {
+        "summary": "Download the HTML source",
+        "responses": {
+          "200": { "description": "The document", "content": { "text/html": { "schema": { "type": "string" } } } },
+          "401": { "$ref": "#/components/responses/Problem" },
+          "404": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": { "type": "http", "scheme": "bearer", "description": "API token (ax_...) created in the admin panel." }
+    },
+    "parameters": {
+      "Id": { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "pattern": "^[0-9A-Za-z]{12}$" } },
+      "TitleQuery": { "name": "title", "in": "query", "description": "Raw-body uploads only.", "schema": { "type": "string", "maxLength": 200 } },
+      "DescriptionQuery": { "name": "description", "in": "query", "description": "Raw-body uploads only.", "schema": { "type": "string", "maxLength": 1000 } },
+      "VisibilityQuery": { "name": "visibility", "in": "query", "description": "Raw-body uploads only.", "schema": { "$ref": "#/components/schemas/Visibility" } },
+      "FilenameQuery": { "name": "filename", "in": "query", "description": "Raw-body uploads only. Shown in the admin panel.", "schema": { "type": "string" } }
+    },
+    "requestBodies": {
+      "Upload": {
+        "required": true,
+        "content": {
+          "multipart/form-data": {
+            "schema": {
+              "type": "object",
+              "required": ["file"],
+              "properties": {
+                "file": { "type": "string", "format": "binary", "description": "UTF-8 HTML document." },
+                "title": { "type": "string", "maxLength": 200 },
+                "description": { "type": "string", "maxLength": 1000 },
+                "visibility": { "$ref": "#/components/schemas/Visibility" }
+              }
+            }
+          },
+          "text/html": { "schema": { "type": "string" } }
+        }
+      }
+    },
+    "responses": {
+      "Problem": {
+        "description": "Error (RFC 9457 problem details)",
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "title": { "type": "string" },
+                "status": { "type": "integer" },
+                "detail": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Visibility": {
+        "type": "string",
+        "enum": ["public", "unlisted", "private"],
+        "description": "public: listed on the home page. unlisted: anyone with the link. private: admin only."
+      },
+      "Doc": {
+        "type": "object",
+        "required": ["id", "url", "title", "description", "visibility", "byteSize", "sha256", "sourceFilename", "createdBy", "updatedBy", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "visibility": { "$ref": "#/components/schemas/Visibility" },
+          "byteSize": { "type": "integer" },
+          "sha256": { "type": "string" },
+          "sourceFilename": { "type": "string" },
+          "createdBy": { "type": "string" },
+          "updatedBy": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

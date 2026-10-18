@@ -1,0 +1,14 @@
+# Binaries
+/artifax
+/artifax.exe
+/dist/
+
+# Local data and secrets
+/data/
+.env
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

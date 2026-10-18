@@ -1,0 +1,25 @@
+{{define "content"}}
+<div class="head">
+  <h1>Documents</h1>
+  <form class="search" method="get" action="/">
+    <input type="search" name="q" value="{{.Data.Query}}" placeholder="Search" aria-label="Search documents">
+  </form>
+</div>
+{{with .Data.Docs}}
+<ul class="docs">
+  {{- range .}}
+  <li>
+    <a class="doc-title" href="/d/{{.ID}}">{{or .Title "Untitled"}}</a>
+    {{- with .Description}}<p>{{.}}</p>{{end}}
+    <div class="meta">
+      <time datetime="{{iso .UpdatedAt}}">{{date .UpdatedAt}}</time>
+      {{- if $.Admin}}<span class="tag tag-{{.Visibility}}">{{.Visibility}}</span>{{end}}
+    </div>
+  </li>
+  {{- end}}
+</ul>
+{{else}}
+<p class="empty">{{if .Data.Query}}No documents match “{{.Data.Query}}”.{{else}}Nothing published yet.{{end}}</p>
+{{end}}
+{{with .Data.NextURL}}<p class="more"><a href="{{.}}">Older →</a></p>{{end}}
+{{end}}

@@ -1,0 +1,64 @@
+{{define "content"}}
+{{with .Data.Doc}}
+<p class="crumbs"><a href="/admin">← Documents</a></p>
+<div class="head">
+  <h1>{{or .Title "Untitled"}}</h1>
+  <a class="button" href="/d/{{.ID}}" target="_blank" rel="noopener">Open</a>
+</div>
+
+<dl class="facts">
+  <dt>URL</dt>
+  <dd><code>{{$.Data.URL}}</code> <button type="button" class="link" data-copy="{{$.Data.URL}}">Copy</button></dd>
+  <dt>Visibility</dt>
+  <dd><span class="tag tag-{{.Visibility}}">{{.Visibility}}</span></dd>
+  <dt>Size</dt>
+  <dd>{{bytes .ByteSize}}{{with .SourceFilename}} · <span class="mono">{{.}}</span>{{end}}</dd>
+  <dt>Created</dt>
+  <dd><time datetime="{{iso .CreatedAt}}">{{date .CreatedAt}}</time> by {{.CreatedBy}}</dd>
+  <dt>Updated</dt>
+  <dd><time datetime="{{iso .UpdatedAt}}">{{date .UpdatedAt}}</time> by {{.UpdatedBy}}</dd>
+</dl>
+
+<section class="panel">
+  <h2>Details</h2>
+  <form class="stack" method="post" action="/admin/docs/{{.ID}}">
+    <label>Title
+      <input type="text" name="title" value="{{.Title}}" maxlength="200">
+    </label>
+    <label>Description
+      <textarea name="description" rows="3" maxlength="1000">{{.Description}}</textarea>
+    </label>
+    <label>Visibility
+      {{- $v := .Visibility}}
+      <select name="visibility">
+        {{- range visibilities}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <p class="hint">Public: listed on the home page. Unlisted: anyone with the link. Private: only you.</p>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Content</h2>
+  <form class="stack" method="post" action="/admin/docs/{{.ID}}/content" enctype="multipart/form-data">
+    <label>Replace with a new HTML file
+      <input type="file" name="file" accept=".html,.htm,text/html" required>
+    </label>
+    <p class="hint">The URL stays the same.</p>
+    <div class="row">
+      <button type="submit">Replace</button>
+      <a href="/admin/docs/{{.ID}}/raw">Download source</a>
+    </div>
+  </form>
+</section>
+
+<section class="panel panel-danger">
+  <h2>Delete</h2>
+  <p class="hint">Deletion is permanent. There is no trash.</p>
+  <form method="post" action="/admin/docs/{{.ID}}/delete" data-confirm="Delete this document permanently?">
+    <button type="submit" class="danger">Delete document</button>
+  </form>
+</section>
+{{end}}
+{{end}}
