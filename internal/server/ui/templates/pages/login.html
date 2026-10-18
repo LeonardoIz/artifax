@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="narrow">
+  <h1 data-vt="page-title">Log in</h1>
+  <form class="stack" method="post" action="/auth/login">
+    <input type="hidden" name="next" value="{{.Data.Next}}">
+    <label>Email
+      <input type="email" name="email" value="{{.Data.Email}}" autocomplete="username" required autofocus>
+    </label>
+    <label>Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">Log in</button>
+  </form>
+</div>
+{{end}}

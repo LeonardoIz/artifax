@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="head">
+  <h1 data-vt="page-title">API tokens</h1>
+</div>
+
+{{with .Data.NewSecret}}
+<div class="panel panel-accent">
+  <p><strong>Token created.</strong> Copy it now, it will not be shown again.</p>
+  <div class="row">
+    <code class="secret">{{.}}</code>
+    <button type="button" data-copy="{{.}}">Copy</button>
+  </div>
+</div>
+{{end}}
+
+<form class="filters" method="post" action="/admin/tokens">
+  <input type="text" name="name" maxlength="100" placeholder="Name, e.g. claude-laptop" aria-label="Token name" required>
+  <button type="submit">Create token</button>
+</form>
+
+{{if .Data.Tokens}}
+<div class="table-wrap">
+<table class="list">
+  <thead><tr><th>Name</th><th>Token</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+  <tbody>
+  {{- range .Data.Tokens}}
+    <tr>
+      <td>{{.Name}}</td>
+      <td class="mono">{{.Prefix}}…</td>
+      <td><time datetime="{{iso .CreatedAt}}">{{date .CreatedAt}}</time></td>
+      <td>{{if .LastUsedAt}}<time datetime="{{iso .LastUsedAt}}">{{date .LastUsedAt}}</time>{{else}}<span class="muted">never</span>{{end}}</td>
+      <td class="actions">
+        <form method="post" action="/admin/tokens/{{.ID}}/revoke" data-confirm="Revoke “{{.Name}}”? Agents using it will stop working." data-confirm-label="Revoke">
+          <button type="submit" class="link danger">Revoke</button>
+        </form>
+      </td>
+    </tr>
+  {{- end}}
+  </tbody>
+</table>
+</div>
+{{else}}
+<p class="empty">No tokens yet.</p>
+{{end}}
+
+<section class="panel">
+  <h2>Usage</h2>
+  <pre><code>curl -X POST {{.Data.BaseURL}}/api/docs \
+  -H "Authorization: Bearer $ARTIFAX_TOKEN" \
+  -F "file=@page.html" -F "visibility=unlisted"</code></pre>
+</section>
+{{end}}

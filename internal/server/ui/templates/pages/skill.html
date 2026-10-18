@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="head">
+  <div>
+    <h1 data-vt="page-title">Agent skill</h1>
+    <p class="muted">Teaches Claude Code and other agents to write and publish pages here.</p>
+  </div>
+  <div class="row">
+    <button type="button" class="secondary" data-copy-target="skill-md">Copy</button>
+    <a class="button" href="/skill.md?download">Download</a>
+  </div>
+</div>
+
+<section class="panel">
+  <h2>Install</h2>
+  <pre><code>mkdir -p ~/.claude/skills/artifax
+curl -fsSL {{.Data.BaseURL}}/skill.md -o ~/.claude/skills/artifax/SKILL.md
+
+export ARTIFAX_URL={{.Data.BaseURL}}
+export ARTIFAX_TOKEN=ax_...   # create one in Panel → Tokens</code></pre>
+  <p class="hint">Agents can also read it directly: <code>curl {{.Data.BaseURL}}/skill</code> returns Markdown.</p>
+</section>
+
+<section class="panel">
+  <h2>SKILL.md</h2>
+  <pre class="skill-source" id="skill-md">{{.Data.Markdown}}</pre>
+</section>
+{{end}}

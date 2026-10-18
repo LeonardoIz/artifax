@@ -1,0 +1,21 @@
+# cp .env.example .env   # then edit it
+# docker compose up -d
+services:
+  artifax:
+    image: ghcr.io/leonardoiz/artifax:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ARTIFAX_LISTEN: ":8080"
+      ARTIFAX_DATA_DIR: /data
+      ARTIFAX_TRUST_PROXY: "true" # behind a reverse proxy that terminates TLS
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - artifax-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  artifax-data:

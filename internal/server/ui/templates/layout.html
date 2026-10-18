@@ -1,0 +1,54 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{with .Title}}{{.}} · {{end}}artifax</title>
+<link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
+<link rel="stylesheet" href="{{asset "style.css"}}">
+</head>
+<body>
+<header class="bar">
+  <div class="wrap bar-inner">
+    <a class="brand" href="/"><img src="{{asset "favicon.svg"}}" alt="" width="20" height="20">artifax</a>
+    <nav>
+    {{- if .Admin}}
+      <a href="/admin"{{if eq .Section "docs"}} aria-current="page"{{end}}>Panel</a>
+      <a href="/admin/tokens"{{if eq .Section "tokens"}} aria-current="page"{{end}}>Tokens</a>
+      <form method="post" action="/auth/logout"><button type="submit" class="link">Log out</button></form>
+    {{- else if .AuthEnabled}}
+      <a href="/auth/login">Log in</a>
+    {{- end}}
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+{{template "content" .}}
+</main>
+<footer class="foot">
+  <div class="wrap foot-inner">
+    <span>artifax {{.Version}}</span>
+    <a href="/skill">Agent skill</a>
+  </div>
+</footer>
+
+<div class="toasts" aria-live="polite">
+  {{- with .Flash}}<div class="toast" role="status">{{.}}</div>{{end}}
+  {{- with .Error}}<div class="toast toast-error" role="alert"><span>{{.}}</span><button type="button" class="toast-close" aria-label="Dismiss">×</button></div>{{end}}
+</div>
+
+<dialog class="dialog" id="confirm-dialog">
+  <form method="dialog">
+    <p class="dialog-msg"></p>
+    <div class="dialog-actions">
+      <button value="cancel" class="secondary">Cancel</button>
+      <button value="ok" class="danger">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+{{/* Not deferred: it must name view-transition elements before the first render. */}}
+<script src="{{asset "app.js"}}"></script>
+</body>
+</html>
+{{end}}

@@ -1,0 +1,81 @@
+{{define "content"}}
+{{with .Data.Doc}}
+<p class="crumbs"><a href="/admin">← Artifacts</a></p>
+<div class="head">
+  <h1 data-vt="doc-{{.ID}}">{{or .Title "Untitled"}}</h1>
+  <a class="button" href="/d/{{.ID}}" target="_blank" rel="noopener">Open</a>
+</div>
+
+<dl class="facts">
+  <dt>URL</dt>
+  <dd><code>{{$.Data.URL}}</code> <button type="button" class="link" data-copy="{{$.Data.URL}}">Copy</button></dd>
+  <dt>Visibility</dt>
+  <dd><span class="tag tag-{{.Visibility}}">{{.Visibility}}</span></dd>
+  <dt>Type</dt>
+  <dd>{{kind .ContentType}} <span class="muted mono small">{{.ContentType}}</span></dd>
+  <dt>Size</dt>
+  <dd>{{bytes .ByteSize}}{{with .SourceFilename}} · <span class="mono">{{.}}</span>{{end}}</dd>
+  <dt>Created</dt>
+  <dd><time datetime="{{iso .CreatedAt}}">{{date .CreatedAt}}</time> by {{.CreatedBy}}</dd>
+  <dt>Updated</dt>
+  <dd><time datetime="{{iso .UpdatedAt}}">{{date .UpdatedAt}}</time> by {{.UpdatedBy}}</dd>
+</dl>
+
+{{- $kind := $.Data.Kind}}
+{{if eq $kind "image" "svg"}}
+<section class="panel preview"><img src="/d/{{.ID}}" alt="{{.Title}}"></section>
+{{else if eq $kind "video"}}
+<section class="panel preview"><video src="/d/{{.ID}}" controls preload="metadata"></video></section>
+{{else if eq $kind "audio"}}
+<section class="panel preview"><audio src="/d/{{.ID}}" controls preload="metadata"></audio></section>
+{{else if $.Data.Text}}
+<section class="panel">
+  <h2>Preview</h2>
+  <pre class="preview-text">{{$.Data.Text}}</pre>
+  {{- if $.Data.TextMore}}<p class="hint">Showing the first 64 KB. Open it to see everything.</p>{{end}}
+</section>
+{{end}}
+
+<section class="panel">
+  <h2>Details</h2>
+  <form class="stack" method="post" action="/admin/docs/{{.ID}}">
+    <label>Title
+      <input type="text" name="title" value="{{.Title}}" maxlength="200" required>
+    </label>
+    <label>Description
+      <textarea name="description" rows="3" maxlength="1000" required>{{.Description}}</textarea>
+    </label>
+    <label>Visibility
+      {{- $v := .Visibility}}
+      <select name="visibility">
+        {{- range visibilities}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <p class="hint">Public: listed on the home page. Unlisted: anyone with the link. Private: only you.</p>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Content</h2>
+  <form class="stack" method="post" action="/admin/docs/{{.ID}}/content" enctype="multipart/form-data">
+    <label>Replace with a new file
+      <input type="file" name="file" required>
+    </label>
+    <p class="hint">The URL, title and description stay the same. The type may change.</p>
+    <div class="row">
+      <button type="submit">Replace</button>
+      <a href="/d/{{.ID}}?download">Download</a>
+    </div>
+  </form>
+</section>
+
+<section class="panel panel-danger">
+  <h2>Delete</h2>
+  <p class="hint">Deletion is permanent. There is no trash.</p>
+  <form method="post" action="/admin/docs/{{.ID}}/delete" data-confirm="Delete this document permanently?">
+    <button type="submit" class="danger">Delete document</button>
+  </form>
+</section>
+{{end}}
+{{end}}

@@ -1,0 +1,11 @@
+.git
+.github
+.vscode
+.idea
+data
+dist
+artifax
+artifax.exe
+.env
+*.md
+!README.md
