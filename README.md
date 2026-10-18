@@ -123,3 +123,7 @@ internal/auth        API tokens, sessions, basic login, OIDC
 internal/server      HTTP routes, templates and static assets
 skills/artifax       agent skill
 ```
+
+## License
+
+[MIT](LICENSE)

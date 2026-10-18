@@ -22,7 +22,7 @@ FROM gcr.io/distroless/static-debian12:nonroot
 LABEL org.opencontainers.image.title="artifax" \
       org.opencontainers.image.description="Self-hosted publishing for single HTML files" \
       org.opencontainers.image.source="https://github.com/LeonardoIz/artifax" \
-      org.opencontainers.image.licenses=""
+      org.opencontainers.image.licenses="MIT"
 
 COPY --from=build /out/artifax /usr/local/bin/artifax
 COPY --from=build --chown=65532:65532 /out/data /data
