@@ -28,6 +28,17 @@ curl -X POST http://localhost:8080/api/docs \
 
 Open `http://localhost:8080/` for the index and `/admin` for the panel.
 
+## Docker
+
+Images for `linux/amd64` and `linux/arm64` are published to `ghcr.io/leonardoiz/artifax` (`latest` from `main`, plus semver tags for releases).
+
+```bash
+cp .env.example .env   # set ARTIFAX_BASE_URL, AUTH_MODE and credentials
+docker compose up -d
+```
+
+The container runs as a non-root user on a read-only filesystem. All state lives in the `/data` volume. Put it behind a reverse proxy that terminates TLS. [`compose.yaml`](compose.yaml) includes commented Traefik labels.
+
 ## Configuration
 
 | Variable | Default | Description |

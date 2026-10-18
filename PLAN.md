@@ -171,7 +171,7 @@ Dockerfile · compose.example.yaml · README.md
 1. ✅ **Núcleo**: config, store y migraciones, blobs, API completa con el token de arranque, `/d/{id}` para docs públicos y unlisted, y tests con `httptest`.
 2. ✅ **Auth**: sesiones, modos `basic` y `sso`, docs privados, logout. El flujo OIDC está probado contra un IdP falso.
 3. ✅ **UI**: índice `/` y panel `/admin` (docs + tokens). Textos de la interfaz en inglés.
-4. 🟡 **Entrega**: hechos `openapi.json`, skill, README y CI (tests + build). Pendientes: Dockerfile, `compose.example.yaml` y el workflow de imagen en GitHub Actions.
+4. ✅ **Entrega**: `openapi.json`, skill, README, Dockerfile (distroless, nonroot, multi-arch), `compose.yaml` y CI. La CI ejecuta tests, publica la imagen en GHCR y, con tags `v*`, publica binarios en las releases.
 
 ## Fuera de alcance v1
 

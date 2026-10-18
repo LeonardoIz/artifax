@@ -1,0 +1,47 @@
+# Artifax behind your reverse proxy (Traefik, Caddy, nginx...). TLS terminates at the proxy.
+#
+#   cp .env.example .env   # then edit it
+#   docker compose up -d
+#
+# To build locally instead of pulling: docker compose up -d --build
+
+services:
+  artifax:
+    image: ghcr.io/leonardoiz/artifax:latest
+    build: .
+    container_name: artifax
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Fixed inside the container; everything else comes from .env.
+      ARTIFAX_LISTEN: ":8080"
+      ARTIFAX_DATA_DIR: /data
+      # Requests arrive through the reverse proxy; take the client IP from X-Forwarded-For.
+      ARTIFAX_TRUST_PROXY: "true"
+    ports:
+      - "127.0.0.1:8080:8080" # expose only to the host; publish through the proxy
+    volumes:
+      - artifax-data:/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+
+    # Traefik example (remove `ports` above if you use it):
+    # labels:
+    #   traefik.enable: "true"
+    #   traefik.http.routers.artifax.rule: Host(`artifax.example.com`)
+    #   traefik.http.routers.artifax.entrypoints: websecure
+    #   traefik.http.routers.artifax.tls.certresolver: letsencrypt
+    #   traefik.http.services.artifax.loadbalancer.server.port: "8080"
+    # networks: [proxy]
+
+volumes:
+  artifax-data:
+
+# networks:
+#   proxy:
+#     external: true
