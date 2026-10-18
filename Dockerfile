@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Build on the runner's native platform and cross-compile: pure Go, no CGO, no QEMU.
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
 WORKDIR /src
 
 COPY go.mod go.sum ./
