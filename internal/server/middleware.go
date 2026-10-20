@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io/fs"
 	"net"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LeonardoIz/artifax/internal/auth"
 	"github.com/LeonardoIz/artifax/internal/store"
 )
 
@@ -61,7 +63,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 			"status", sw.status,
 			"bytes", sw.bytes,
 			"duration", time.Since(start).Round(time.Microsecond),
-			"ip", s.clientIP(r),
+			"ip", clientIP(r),
 		)
 	})
 }
@@ -93,6 +95,9 @@ func baseHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "same-origin")
 		h.Set("X-Frame-Options", "DENY")
+		// Pages opened from an artifact (window.open) lose the link back to it, so an
+		// artifact cannot later navigate an admin tab to a fake login page.
+		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -113,17 +118,9 @@ func staticHandler(fsys fs.FS) http.Handler {
 	})
 }
 
-// clientIP returns the caller address, honouring X-Forwarded-For only behind a trusted proxy.
-func (s *Server) clientIP(r *http.Request) string {
-	if s.cfg.TrustProxy {
-		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			parts := strings.Split(xff, ",")
-			// The right-most entry is the one appended by our proxy.
-			if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
-				return ip
-			}
-		}
-	}
+// clientIP returns the address of the connection, for logs. Behind a reverse proxy
+// that is the proxy; its own access log has the real client.
+func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr
@@ -175,16 +172,28 @@ func (s *Server) admin(h http.HandlerFunc) http.Handler {
 func (s *Server) api(h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
-		raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || raw == "" {
+		// The scheme is case-insensitive (RFC 9110).
+		scheme, raw, _ := strings.Cut(r.Header.Get("Authorization"), " ")
+		if !strings.EqualFold(scheme, "Bearer") || strings.TrimSpace(raw) == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="artifax"`)
 			writeProblem(w, http.StatusUnauthorized, "Unauthorized", "missing bearer token")
 			return
 		}
 		tok, err := s.tokens.Verify(r.Context(), strings.TrimSpace(raw))
-		if err != nil {
+		var expired *auth.ExpiredError
+		switch {
+		case errors.As(err, &expired):
+			w.Header().Set("WWW-Authenticate", `Bearer realm="artifax", error="invalid_token"`)
+			writeProblem(w, http.StatusUnauthorized, "Unauthorized",
+				"token expired on "+expired.At.UTC().Format("2006-01-02")+"; create a new one under Admin → API tokens")
+			return
+		case errors.Is(err, auth.ErrInvalidToken):
 			w.Header().Set("WWW-Authenticate", `Bearer realm="artifax", error="invalid_token"`)
 			writeProblem(w, http.StatusUnauthorized, "Unauthorized", "invalid or revoked token")
+			return
+		case err != nil:
+			s.log.Error("token check failed", "err", err)
+			writeProblem(w, http.StatusInternalServerError, "Internal Server Error", "unexpected error")
 			return
 		}
 		h(w, r.WithContext(context.WithValue(r.Context(), actorKey, "token:"+tok.Name)))

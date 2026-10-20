@@ -5,6 +5,37 @@ All notable changes to this project are documented here, following
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-20
+
+### Added
+
+- Pagination has a "Newest" link back to the first page.
+- At startup, files left by interrupted uploads are removed.
+
+### Changed
+
+- Uploads are streamed to disk instead of being held in memory, so large files no
+  longer need twice their size in RAM.
+- Slow connections: downloads have no time limit, and uploads get 2 minutes plus one
+  per 5 MB of `ARTIFAX_MAX_UPLOAD_MB`. Both used to be cut after 2 minutes.
+- An expired token gets `token expired on <date>` instead of `invalid or revoked token`.
+- The `Authorization` scheme is case-insensitive (`bearer` works).
+- UI pages send `Cross-Origin-Opener-Policy: same-origin`, so an artifact that opens
+  the admin in a popup cannot navigate it later.
+- Expired tokens show a "Remove" button instead of "Revoke".
+- Dates rendered without JavaScript say "UTC". The 413 error is given in MB.
+- The favicon follows the browser's light or dark theme.
+- Release notes are taken from this changelog.
+
+### Removed
+
+- The login attempt limit for `AUTH_MODE=basic`, and `ARTIFAX_TRUST_PROXY`, which
+  only fed it. Logs show the connecting address (the proxy, behind one).
+
+### Fixed
+
+- Token names are limited to 100 characters, not 100 bytes, so accented names fit.
+
 ## [1.1.0] - 2026-10-20
 
 ### Added
@@ -48,6 +79,7 @@ First release.
 - `/skill` serves an agent skill with the instance URL filled in.
 - One Go binary with SQLite and files on disk. Docker image for amd64/arm64.
 
-[Unreleased]: https://github.com/LeonardoIz/artifax/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/LeonardoIz/artifax/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/LeonardoIz/artifax/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/LeonardoIz/artifax/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/LeonardoIz/artifax/releases/tag/v1.0.0

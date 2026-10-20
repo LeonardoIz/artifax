@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/LeonardoIz/artifax/internal/auth"
 	"github.com/LeonardoIz/artifax/internal/config"
@@ -20,9 +19,8 @@ type Server struct {
 	docs     *docs.Service
 	tokens   *auth.Tokens
 	sessions *auth.Sessions
-	basic    *auth.Basic   // set when AUTH_MODE=basic
-	limiter  *auth.Limiter // login attempts, basic mode
-	oidc     *auth.OIDC    // set when AUTH_MODE=sso
+	basic    *auth.Basic // set when AUTH_MODE=basic
+	oidc     *auth.OIDC  // set when AUTH_MODE=sso
 	views    *views
 	log      *slog.Logger
 	version  string
@@ -58,7 +56,6 @@ func New(d Deps) (*Server, error) {
 	switch d.Config.AuthMode {
 	case config.AuthBasic:
 		s.basic = auth.NewBasic(d.Config.AdminEmail, d.Config.AdminPassword)
-		s.limiter = auth.NewLimiter(10, 15*time.Minute)
 	case config.AuthSSO:
 		s.oidc = auth.NewOIDC(d.Config.OIDCIssuer, d.Config.OIDCClientID, d.Config.OIDCClientSecret,
 			d.Config.URL("/auth/callback"), d.Config.AdminGroups)

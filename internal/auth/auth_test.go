@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,12 @@ func TestTokens(t *testing.T) {
 	if _, _, err := tokens.Create(ctx, "  ", 0); err == nil {
 		t.Error("blank name accepted")
 	}
+	if _, _, err := tokens.Create(ctx, strings.Repeat("ñ", 100), 0); err != nil {
+		t.Errorf("100 characters rejected: %v", err)
+	}
+	if _, _, err := tokens.Create(ctx, strings.Repeat("ñ", 101), 0); !errors.Is(err, ErrTokenName) {
+		t.Errorf("101 characters = %v", err)
+	}
 	if _, _, err := tokens.Create(ctx, "Agent", 0); !errors.Is(err, store.ErrNameTaken) {
 		t.Errorf("duplicate name = %v", err)
 	}
@@ -78,7 +85,8 @@ func TestTokenExpiry(t *testing.T) {
 		t.Fatalf("fresh token rejected: %v", err)
 	}
 	now = now.Add(time.Hour)
-	if _, err := tokens.Verify(ctx, secret); !errors.Is(err, ErrInvalidToken) {
+	var expired *ExpiredError
+	if _, err := tokens.Verify(ctx, secret); !errors.As(err, &expired) || !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("expired token = %v", err)
 	}
 
@@ -115,24 +123,6 @@ func TestBasicCheck(t *testing.T) {
 	}
 	if b.Check("admin@example.com", "wrong") || b.Check("other@example.com", "correct horse battery") {
 		t.Error("invalid credentials accepted")
-	}
-}
-
-func TestLimiter(t *testing.T) {
-	now := time.Now()
-	l := NewLimiter(2, time.Minute)
-	l.now = func() time.Time { return now }
-	l.Fail("ip")
-	l.Fail("ip")
-	if l.Allowed("ip") {
-		t.Fatal("allowed after max failures")
-	}
-	if !l.Allowed("other") {
-		t.Fatal("other key blocked")
-	}
-	now = now.Add(2 * time.Minute)
-	if !l.Allowed("ip") {
-		t.Fatal("still blocked after window")
 	}
 }
 

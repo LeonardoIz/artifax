@@ -2,10 +2,12 @@
 package docs
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"log/slog"
 	"os"
 	"path"
@@ -69,21 +71,29 @@ type Fields struct {
 	Visibility  *store.Visibility
 }
 
-// Upload is new content plus optional metadata.
+// Upload is new content plus optional metadata. Body is streamed to disk, never
+// held in memory as a whole.
 type Upload struct {
-	Content     []byte
+	Body        io.Reader
 	Filename    string
 	ContentType string // as declared by the client; the stored type is detected
 	Fields
 }
 
-// Create stores a new artifact. Visibility defaults to private and the title defaults
-// to the page's <title> for HTML, or to the file name otherwise.
+// Create stores a new artifact. Visibility defaults to private. Title and description
+// are required, except that HTML pages default to their <title>.
 func (s *Service) Create(ctx context.Context, up Upload, actor string) (*store.Doc, error) {
-	ct, err := s.detect(up)
+	head, ct, err := s.detect(&up)
 	if err != nil {
 		return nil, err
 	}
+	// Content problems (size) are reported before metadata ones.
+	st, err := s.stage(head, up.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Discard()
+
 	now := s.now()
 	d := &store.Doc{
 		ID:          ids.DocID(),
@@ -96,7 +106,7 @@ func (s *Service) Create(ctx context.Context, up Upload, actor string) (*store.D
 		return nil, err
 	}
 	if up.Title == nil {
-		d.Title = defaultTitle(ct, up)
+		d.Title = defaultTitle(ct, head)
 	}
 	// Arbitrary files carry no usable metadata, so new artifacts must be described.
 	if d.Title == "" {
@@ -108,7 +118,7 @@ func (s *Service) Create(ctx context.Context, up Upload, actor string) (*store.D
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.setContent(d, up, actor, now); err != nil {
+	if err := s.setContent(d, st, up.Filename, actor, now); err != nil {
 		return nil, err
 	}
 	if err := s.store.InsertDoc(ctx, d); err != nil {
@@ -120,10 +130,15 @@ func (s *Service) Create(ctx context.Context, up Upload, actor string) (*store.D
 
 // Replace swaps the content of an existing document, keeping its id.
 func (s *Service) Replace(ctx context.Context, id string, up Upload, actor string) (*store.Doc, error) {
-	ct, err := s.detect(up)
+	head, ct, err := s.detect(&up)
 	if err != nil {
 		return nil, err
 	}
+	st, err := s.stage(head, up.Body)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Discard()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -137,9 +152,9 @@ func (s *Service) Replace(ctx context.Context, id string, up Upload, actor strin
 		return nil, err
 	}
 	if up.Title == nil && d.Title == "" {
-		d.Title = defaultTitle(ct, up)
+		d.Title = defaultTitle(ct, head)
 	}
-	if err := s.setContent(d, up, actor, s.now()); err != nil {
+	if err := s.setContent(d, st, up.Filename, actor, s.now()); err != nil {
 		return nil, err
 	}
 	if err := s.store.UpdateDoc(ctx, d); err != nil {
@@ -217,40 +232,84 @@ func (s *Service) Open(d *store.Doc) (*os.File, error) {
 	return s.blobs.Open(d.BlobSHA256)
 }
 
-// detect checks the upload and returns its content type. Any non-empty file within
-// the size limit is accepted.
-func (s *Service) detect(up Upload) (string, error) {
-	switch {
-	case len(up.Content) == 0:
-		return "", &ValidationError{Msg: "file is empty"}
-	case int64(len(up.Content)) > s.maxBytes:
-		return "", ErrTooLarge
+// Sweep removes files left behind by interrupted uploads. Run it at startup.
+func (s *Service) Sweep(ctx context.Context) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	used, err := s.store.BlobKeys(ctx)
+	if err != nil {
+		return 0, err
 	}
-	return media.Detect(up.Filename, up.ContentType, up.Content), nil
+	return s.blobs.Sweep(func(key string) bool { return used[key] }, time.Hour)
+}
+
+// headBytes is how much of an upload is read up front: enough to sniff its type
+// and find an HTML <title>. The rest is streamed straight to disk.
+const headBytes = 64 << 10
+
+// detect reads the start of the upload and returns it with the content type.
+// Any non-empty file within the size limit is accepted.
+func (s *Service) detect(up *Upload) ([]byte, string, error) {
+	if up.Body == nil {
+		return nil, "", &ValidationError{Msg: "file is empty"}
+	}
+	head := make([]byte, headBytes)
+	n, err := io.ReadFull(up.Body, head)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, "", err
+	}
+	head = head[:n]
+	switch {
+	case n == 0:
+		return nil, "", &ValidationError{Msg: "file is empty"}
+	case int64(n) > s.maxBytes:
+		return nil, "", ErrTooLarge
+	}
+	return head, media.Detect(up.Filename, up.ContentType, head), nil
+}
+
+// stage writes head plus the rest of the body to a temporary blob, enforcing the
+// size limit. The caller must Commit or Discard it.
+func (s *Service) stage(head []byte, rest io.Reader) (*blobs.Staged, error) {
+	return s.blobs.Stage(&capped{r: io.MultiReader(bytes.NewReader(head), rest), left: s.maxBytes})
+}
+
+// capped fails with ErrTooLarge once more than left bytes have been read.
+type capped struct {
+	r    io.Reader
+	left int64
+}
+
+func (c *capped) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	if c.left -= int64(n); c.left < 0 {
+		return 0, ErrTooLarge
+	}
+	return n, err
 }
 
 var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
 // defaultTitle is the <title> of HTML pages; other files have none.
-func defaultTitle(ct string, up Upload) string {
+func defaultTitle(ct string, head []byte) string {
 	if media.Classify(ct) != media.HTML {
 		return ""
 	}
-	m := titleRe.FindSubmatch(up.Content[:min(len(up.Content), 64<<10)])
+	m := titleRe.FindSubmatch(head)
 	if m == nil {
 		return ""
 	}
 	return truncate(strings.Join(strings.Fields(html.UnescapeString(string(m[1]))), " "), MaxTitleLen)
 }
 
-func (s *Service) setContent(d *store.Doc, up Upload, actor string, now time.Time) error {
-	sum, err := s.blobs.Put(up.Content)
-	if err != nil {
+// setContent stores the staged content and points d at it. Call it with s.mu held.
+func (s *Service) setContent(d *store.Doc, st *blobs.Staged, filename, actor string, now time.Time) error {
+	if err := st.Commit(); err != nil {
 		return err
 	}
-	d.BlobSHA256 = sum
-	d.ByteSize = int64(len(up.Content))
-	if name := cleanFilename(up.Filename); name != "" {
+	d.BlobSHA256 = st.Key
+	d.ByteSize = st.Size
+	if name := cleanFilename(filename); name != "" {
 		d.SourceFilename = name
 	}
 	d.UpdatedBy = actor

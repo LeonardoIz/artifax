@@ -115,6 +115,24 @@ func (s *Store) BlobReferenced(ctx context.Context, sha string) (bool, error) {
 	return n == 1, nil
 }
 
+// BlobKeys returns the set of blobs referenced by any document.
+func (s *Store) BlobKeys(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT blob_sha256 FROM docs`)
+	if err != nil {
+		return nil, fmt.Errorf("list blobs: %w", err)
+	}
+	defer rows.Close()
+	keys := map[string]bool{}
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, fmt.Errorf("list blobs: %w", err)
+		}
+		keys[k] = true
+	}
+	return keys, rows.Err()
+}
+
 // ListParams filters and paginates ListDocs.
 type ListParams struct {
 	Query        string

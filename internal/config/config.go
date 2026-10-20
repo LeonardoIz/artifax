@@ -26,7 +26,6 @@ type Config struct {
 	DataDir        string
 	MaxUploadBytes int64
 	BootstrapToken string
-	TrustProxy     bool
 
 	AuthMode      AuthMode
 	AdminEmail    string
@@ -81,10 +80,6 @@ func Load(getenv func(string) string) (*Config, error) {
 		errs = append(errs, errors.New("ARTIFAX_MAX_UPLOAD_MB must be a positive integer"))
 	}
 	cfg.MaxUploadBytes = int64(maxMB) << 20
-
-	if cfg.TrustProxy, err = strconv.ParseBool(get("ARTIFAX_TRUST_PROXY", "false")); err != nil {
-		errs = append(errs, errors.New("ARTIFAX_TRUST_PROXY must be true or false"))
-	}
 
 	if cfg.SessionTTL, err = time.ParseDuration(get("SESSION_TTL", "168h")); err != nil || cfg.SessionTTL <= 0 {
 		errs = append(errs, errors.New("SESSION_TTL must be a positive duration such as 168h"))

@@ -8,7 +8,6 @@ services:
     environment:
       ARTIFAX_LISTEN: ":8080"
       ARTIFAX_DATA_DIR: /data
-      ARTIFAX_TRUST_PROXY: "true" # behind a reverse proxy that terminates TLS
     ports:
       - "127.0.0.1:8080:8080"
     volumes:

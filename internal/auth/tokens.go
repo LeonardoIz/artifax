@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/LeonardoIz/artifax/internal/ids"
 	"github.com/LeonardoIz/artifax/internal/store"
@@ -16,6 +17,13 @@ const TokenPrefix = "ax_"
 
 // ErrInvalidToken is returned for unknown, revoked, expired or malformed tokens.
 var ErrInvalidToken = errors.New("invalid token")
+
+// ExpiredError is returned for a valid token past its expiry. It wraps
+// ErrInvalidToken, so callers that only care about validity can ignore it.
+type ExpiredError struct{ At time.Time }
+
+func (e *ExpiredError) Error() string { return "token expired" }
+func (e *ExpiredError) Unwrap() error { return ErrInvalidToken }
 
 // ErrTokenName is returned for a blank or overlong token name.
 var ErrTokenName = errors.New("token name must be 1-100 characters")
@@ -54,7 +62,7 @@ func (t *Tokens) Verify(ctx context.Context, secret string) (*store.Token, error
 	}
 	now := t.now()
 	if tok.ExpiredAt(now) {
-		return nil, ErrInvalidToken
+		return nil, &ExpiredError{At: *tok.ExpiresAt}
 	}
 	// Throttle writes: one last-used update per minute is plenty.
 	if tok.LastUsedAt == nil || now.Sub(*tok.LastUsedAt) > time.Minute {
@@ -93,7 +101,7 @@ func (t *Tokens) SeedBootstrap(ctx context.Context, secret string) (bool, error)
 
 func (t *Tokens) insert(ctx context.Context, name, secret string, ttl time.Duration) (*store.Token, error) {
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > 100 {
+	if name == "" || utf8.RuneCountInString(name) > 100 {
 		return nil, ErrTokenName
 	}
 	tok := &store.Token{

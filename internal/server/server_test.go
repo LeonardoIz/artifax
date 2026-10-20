@@ -486,20 +486,6 @@ func TestBasicLoginAndLogout(t *testing.T) {
 	}
 }
 
-func TestLoginRateLimit(t *testing.T) {
-	e := newEnv(t, nil)
-	form := url.Values{"email": {adminEmail}, "password": {"wrong"}}.Encode()
-	var last int
-	for range 11 {
-		r := httptest.NewRequest("POST", "/auth/login", strings.NewReader(form))
-		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		last = e.do(r).Code
-	}
-	if last != http.StatusTooManyRequests {
-		t.Fatalf("11th attempt: %d", last)
-	}
-}
-
 func TestCrossOriginPostRejected(t *testing.T) {
 	e := newEnv(t, nil)
 	e.login()
@@ -704,5 +690,41 @@ func TestMiscRoutes(t *testing.T) {
 	}
 	if csp := e.do(get("/")).Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self'") {
 		t.Errorf("ui csp = %q", csp)
+	}
+}
+
+func TestTokenAuthDetails(t *testing.T) {
+	e := newEnv(t, nil)
+
+	// The scheme is case-insensitive.
+	r := httptest.NewRequest("GET", "/api/docs", nil)
+	r.Header.Set("Authorization", "bearer "+e.token)
+	if rec := e.do(r); rec.Code != http.StatusOK {
+		t.Errorf("lowercase bearer: %d", rec.Code)
+	}
+
+	// Expired tokens say so, with the date.
+	_, secret, err := e.tokens.Create(context.Background(), "short-lived", time.Nanosecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Millisecond)
+	r = httptest.NewRequest("GET", "/api/docs", nil)
+	r.Header.Set("Authorization", "Bearer "+secret)
+	rec := e.do(r)
+	if rec.Code != http.StatusUnauthorized || !strings.Contains(rec.Body.String(), "token expired on ") {
+		t.Errorf("expired token: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// UI pages cut window.opener links; artifacts keep them (OAuth popups and the like).
+func TestOpenerPolicy(t *testing.T) {
+	e := newEnv(t, nil)
+	d := e.create("<p>x</p>", map[string]string{"visibility": "public"})
+	if got := e.do(get("/")).Header().Get("Cross-Origin-Opener-Policy"); got != "same-origin" {
+		t.Errorf("UI COOP = %q", got)
+	}
+	if got := e.do(get("/d/" + d.ID)).Header().Get("Cross-Origin-Opener-Policy"); got != "" {
+		t.Errorf("artifact COOP = %q", got)
 	}
 }

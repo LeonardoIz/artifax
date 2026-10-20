@@ -125,7 +125,7 @@ func formatDate(v any) string {
 	if !ok {
 		return ""
 	}
-	return t.UTC().Format("2006-01-02 15:04")
+	return t.UTC().Format("2006-01-02 15:04 UTC") // app.js swaps in local time
 }
 
 func formatISO(v any) string {

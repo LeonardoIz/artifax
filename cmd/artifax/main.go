@@ -1,4 +1,4 @@
-// Command artifax runs the Artifax HTML publishing server.
+// Command artifax runs Artifax: self-hosted sharing for artifacts uploaded by agents.
 package main
 
 import (
@@ -71,6 +71,13 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
+	docSvc := docs.NewService(st, bl, cfg.MaxUploadBytes, log)
+	if n, err := docSvc.Sweep(ctx); err != nil {
+		log.Warn("cleanup of interrupted uploads failed", "err", err)
+	} else if n > 0 {
+		log.Info("removed files left by interrupted uploads", "count", n)
+	}
+
 	tokens := auth.NewTokens(st)
 	if seeded, err := tokens.SeedBootstrap(ctx, cfg.BootstrapToken); err != nil {
 		return fmt.Errorf("seed bootstrap token: %w", err)
@@ -82,7 +89,7 @@ func run(log *slog.Logger) error {
 	srv, err := server.New(server.Deps{
 		Config:   cfg,
 		Store:    st,
-		Docs:     docs.NewService(st, bl, cfg.MaxUploadBytes, log),
+		Docs:     docSvc,
 		Tokens:   tokens,
 		Sessions: sessions,
 		Log:      log,

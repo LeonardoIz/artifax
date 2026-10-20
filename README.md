@@ -26,7 +26,6 @@ Images for `amd64` and `arm64` are on `ghcr.io/leonardoiz/artifax`. The containe
 | `ARTIFAX_LISTEN` | `:8080` | |
 | `ARTIFAX_MAX_UPLOAD_MB` | `25` | |
 | `ARTIFAX_BOOTSTRAP_TOKEN` | | API token (`ax_…`) created on first start |
-| `ARTIFAX_TRUST_PROXY` | `false` | Use `X-Forwarded-For` for the client IP |
 | `AUTH_MODE` | | `sso`, `basic` or empty (no admin, public and unlisted artifacts only) |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | | `basic` mode |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | | `sso` mode |

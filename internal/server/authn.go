@@ -52,18 +52,12 @@ func (s *Server) handleLoginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.render(w, status, "login", p)
 	}
 
-	ip := s.clientIP(r)
-	if !s.limiter.Allowed(ip) {
-		fail(http.StatusTooManyRequests, "Too many failed attempts. Try again later.")
-		return
-	}
+	ip := clientIP(r)
 	if !s.basic.Check(email, r.PostForm.Get("password")) {
-		s.limiter.Fail(ip)
 		s.log.Warn("login failed", "ip", ip)
 		fail(http.StatusUnauthorized, "Wrong email or password.")
 		return
 	}
-	s.limiter.Reset(ip)
 	if err := s.sessions.Start(r.Context(), w, "basic:"+email, email); err != nil {
 		s.serverError(w, r, err)
 		return

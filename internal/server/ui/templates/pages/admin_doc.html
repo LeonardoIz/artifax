@@ -14,7 +14,7 @@
   <dt>Type</dt>
   <dd>{{kind .ContentType}} <span class="muted mono small">{{.ContentType}}</span></dd>
   <dt>Size</dt>
-  <dd>{{bytes .ByteSize}}{{with .SourceFilename}} · <span class="mono">{{.}}</span>{{end}}</dd>
+  <dd>{{bytes .ByteSize}}{{with .SourceFilename}} - <span class="mono">{{.}}</span>{{end}}</dd>
   <dt>Created</dt>
   <dd><time datetime="{{iso .CreatedAt}}">{{date .CreatedAt}}</time> by {{.CreatedBy}}</dd>
   <dt>Updated</dt>

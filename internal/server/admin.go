@@ -22,7 +22,7 @@ type adminData struct {
 	Docs       []store.Doc
 	Query      string
 	Visibility string
-	NextURL    string
+	Pages      pager
 	Return     string
 	Count      int
 	Bytes      int64
@@ -97,7 +97,7 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		Docs:       list,
 		Query:      p.Query,
 		Visibility: string(vis),
-		NextURL:    nextURL("/admin", q, next),
+		Pages:      pageLinks("/admin", q, next),
 		Return:     r.URL.RequestURI(),
 		Count:      count,
 		Bytes:      size,
@@ -110,7 +110,8 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminUpload(w http.ResponseWriter, r *http.Request) {
-	up, err := s.readUpload(w, r)
+	up, done, err := s.readUpload(w, r)
+	defer done()
 	if err == nil {
 		blankToNil(&up.Fields)
 		var d *store.Doc
@@ -210,7 +211,8 @@ func (s *Server) handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminReplace(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	back := "/admin/docs/" + id
-	up, err := s.readUpload(w, r)
+	up, done, err := s.readUpload(w, r)
+	defer done()
 	if err == nil {
 		up.Fields = docs.Fields{} // content only; metadata is edited separately
 		if _, err = s.docs.Replace(r.Context(), id, up, adminActor); err == nil {
@@ -300,7 +302,11 @@ func (s *Server) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request) 
 		s.serverError(w, r, err)
 		return
 	}
-	s.redirectFlash(w, r, "/admin#tokens", "msg", "Token revoked.")
+	msg := "Token revoked."
+	if r.PostFormValue("expired") != "" {
+		msg = "Token removed."
+	}
+	s.redirectFlash(w, r, "/admin#tokens", "msg", msg)
 }
 
 // adminFail redirects back with a readable error, or fails hard for unexpected errors.

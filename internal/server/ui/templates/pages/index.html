@@ -22,5 +22,5 @@
 {{else}}
 <p class="empty">{{if .Data.Query}}No artifacts match “{{.Data.Query}}”.{{else}}Nothing published yet.{{end}}</p>
 {{end}}
-{{with .Data.NextURL}}<p class="more"><a class="with-icon" href="{{.}}">Older{{template "icon-next"}}</a></p>{{end}}
+{{template "pager" .Data.Pages}}
 {{end}}

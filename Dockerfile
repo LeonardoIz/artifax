@@ -20,7 +20,7 @@ RUN mkdir -p /out/data
 
 FROM gcr.io/distroless/static-debian12
 LABEL org.opencontainers.image.title="artifax" \
-      org.opencontainers.image.description="Self-hosted publishing for single HTML files" \
+      org.opencontainers.image.description="Self-hosted sharing for artifacts uploaded by agents" \
       org.opencontainers.image.source="https://github.com/LeonardoIz/artifax" \
       org.opencontainers.image.licenses="MIT"
 

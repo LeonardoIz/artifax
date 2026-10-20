@@ -193,8 +193,9 @@ main { flex: 1; padding-top: 2rem; padding-bottom: 3rem; }
 .crumbs a .icon { transition: transform 200ms var(--ease); }
 .crumbs a:hover .icon { transform: translateX(-2px); }
 .more a .icon { transition: transform 200ms var(--ease); }
-.more a:hover .icon { transform: translateX(2px); }
-.more { text-align: center; margin-top: 1.5rem; }
+.more .older:hover .icon { transform: translateX(2px); }
+.more .newest:hover .icon { transform: translateX(-2px); }
+.more { display: flex; justify-content: center; gap: 1.5rem; margin-top: 1.5rem; }
 .narrow { max-width: 360px; }
 .narrow h1 { margin-bottom: 1.25rem; }
 .row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; }

@@ -56,7 +56,8 @@ func (s *Server) toJSON(d *store.Doc) docJSON {
 func (s *Server) docURL(id string) string { return s.cfg.URL("/d/" + id) }
 
 func (s *Server) apiCreate(w http.ResponseWriter, r *http.Request) {
-	up, err := s.readUpload(w, r)
+	up, done, err := s.readUpload(w, r)
+	defer done()
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -76,7 +77,8 @@ func (s *Server) apiReplace(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, err)
 		return
 	}
-	up, err := s.readUpload(w, r)
+	up, done, err := s.readUpload(w, r)
+	defer done()
 	if err != nil {
 		s.writeError(w, err)
 		return
@@ -179,34 +181,34 @@ func (s *Server) apiRaw(w http.ResponseWriter, r *http.Request) {
 }
 
 // readUpload accepts either multipart/form-data (field "file" plus metadata fields)
-// or a raw HTML body with metadata in the query string.
-func (s *Server) readUpload(w http.ResponseWriter, r *http.Request) (docs.Upload, error) {
-	var up docs.Upload
+// or a raw body with metadata in the query string. The content is not read here:
+// Upload.Body streams it to the blob store. Call done when the upload is handled.
+func (s *Server) readUpload(w http.ResponseWriter, r *http.Request) (up docs.Upload, done func(), err error) {
+	done = func() {}
 	limit := s.docs.MaxBytes() + 64<<10
 	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	// Large uploads over slow links outlast the server's ReadTimeout: allow 2 minutes
+	// plus 1 per 5 MB of the upload limit, so the body still cannot trickle forever.
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(uploadTimeout(s.docs.MaxBytes())))
 
 	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	var meta url.Values
 	if mediaType == "multipart/form-data" {
-		if err := r.ParseMultipartForm(limit); err != nil {
-			return up, bodyError(err)
+		// Parts beyond 1 MB go to temporary files, which net/http removes afterwards.
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			return up, done, bodyError(err)
 		}
 		file, hdr, err := r.FormFile("file")
 		if err != nil {
-			return up, &docs.ValidationError{Msg: `multipart field "file" is required`}
+			return up, done, &docs.ValidationError{Msg: `multipart field "file" is required`}
 		}
-		defer file.Close()
-		if up.Content, err = io.ReadAll(file); err != nil {
-			return up, bodyError(err)
-		}
+		done = func() { file.Close() }
+		up.Body = bodyReader{file}
 		up.Filename = hdr.Filename
 		up.ContentType = hdr.Header.Get("Content-Type")
 		meta = r.MultipartForm.Value
 	} else {
-		var err error
-		if up.Content, err = io.ReadAll(r.Body); err != nil {
-			return up, bodyError(err)
-		}
+		up.Body = bodyReader{r.Body}
 		meta = r.URL.Query()
 		up.Filename = meta.Get("filename")
 		up.ContentType = r.Header.Get("Content-Type")
@@ -218,7 +220,22 @@ func (s *Server) readUpload(w http.ResponseWriter, r *http.Request) (docs.Upload
 		vis := store.Visibility(*v)
 		up.Visibility = &vis
 	}
-	return up, nil
+	return up, done, nil
+}
+
+func uploadTimeout(maxBytes int64) time.Duration {
+	return 2*time.Minute + time.Duration(maxBytes/(5<<20))*time.Minute
+}
+
+// bodyReader reports failures reading the request body as client errors.
+type bodyReader struct{ r io.Reader }
+
+func (b bodyReader) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	if err != nil && err != io.EOF {
+		err = bodyError(err)
+	}
+	return n, err
 }
 
 func bodyError(err error) error {
@@ -245,7 +262,7 @@ func (s *Server) writeError(w http.ResponseWriter, err error) {
 		writeProblem(w, http.StatusBadRequest, "Bad Request", verr.Msg)
 	case errors.Is(err, docs.ErrTooLarge):
 		writeProblem(w, http.StatusRequestEntityTooLarge, "Payload Too Large",
-			fmt.Sprintf("documents are limited to %d bytes", s.docs.MaxBytes()))
+			fmt.Sprintf("artifacts are limited to %d MB", s.docs.MaxBytes()>>20))
 	case errors.Is(err, docs.ErrNotFound):
 		writeProblem(w, http.StatusNotFound, "Not Found", "document not found")
 	case errors.Is(err, store.ErrBadCursor):

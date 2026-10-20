@@ -17,7 +17,7 @@ internal/store    SQLite: schema in migrations/NNN_*.sql (embedded, PRAGMA user_
 internal/blobs    content-addressed files under DATA_DIR/blobs
 internal/docs     artifact service: detect type, required metadata, blob GC
 internal/media    type detection, kinds, per-kind headers/CSP
-internal/auth     API tokens, sessions, basic login + rate limit, OIDC
+internal/auth     API tokens, sessions, basic login, OIDC
 internal/server   routes, handlers, ui/templates, ui/static (embedded)
 skills/artifax    agent skill, served at /skill with the instance URL filled in
 ```

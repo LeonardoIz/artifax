@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/LeonardoIz/artifax/internal/docs"
 	"github.com/LeonardoIz/artifax/internal/media"
@@ -14,9 +15,9 @@ import (
 )
 
 type indexData struct {
-	Docs    []store.Doc
-	Query   string
-	NextURL string
+	Docs  []store.Doc
+	Query string
+	Pages pager
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -39,9 +40,9 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 	}
 	s.render(w, http.StatusOK, "index", s.page(sess, "", indexData{
-		Docs:    list,
-		Query:   p.Query,
-		NextURL: nextURL("/", q, next),
+		Docs:  list,
+		Query: p.Query,
+		Pages: pageLinks("/", q, next),
 	}))
 }
 
@@ -89,12 +90,17 @@ func (s *Server) serveContent(w http.ResponseWriter, r *http.Request, d *store.D
 	}
 	defer f.Close()
 
+	// Big files over slow links outlast the server's WriteTimeout. Stalled clients are
+	// still dropped by TCP keepalives and the idle timeout.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
+
 	resp := media.Serve(d.ContentType)
 	h := w.Header()
 	h.Set("ETag", `"`+d.BlobSHA256+`"`)
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Content-Type-Options", "nosniff")
-	h.Del("X-Frame-Options") // frame-ancestors in the CSP covers it; PDFs have no CSP
+	h.Del("X-Frame-Options")            // frame-ancestors in the CSP covers it; PDFs have no CSP
+	h.Del("Cross-Origin-Opener-Policy") // pages may rely on window.opener (OAuth popups…)
 	if download || resp.Download {
 		h.Set("Content-Type", downloadType(d.ContentType))
 		h.Set("Content-Security-Policy", "sandbox; default-src 'none'")
@@ -154,17 +160,36 @@ func (s *Server) serverError(w http.ResponseWriter, r *http.Request, err error) 
 	http.Error(w, "internal server error", http.StatusInternalServerError)
 }
 
-// nextURL builds the "older" pagination link, keeping the current filters.
-func nextURL(path string, q url.Values, cursor string) string {
-	if cursor == "" {
-		return ""
-	}
-	v := url.Values{}
-	for _, k := range []string{"q", "visibility"} {
-		if q.Get(k) != "" {
-			v.Set(k, q.Get(k))
+// pager holds the pagination links of a list. Empty links are not shown.
+type pager struct {
+	Newest string // back to the first page, when on a later one
+	Older  string // the next page, when there is one
+}
+
+// pageLinks builds the pagination links for path, keeping the current filters.
+// next is the cursor of the following page.
+func pageLinks(path string, q url.Values, next string) pager {
+	link := func(cursor string) string {
+		v := url.Values{}
+		for _, k := range []string{"q", "visibility"} {
+			if q.Get(k) != "" {
+				v.Set(k, q.Get(k))
+			}
 		}
+		if cursor != "" {
+			v.Set("cursor", cursor)
+		}
+		if len(v) == 0 {
+			return path
+		}
+		return path + "?" + v.Encode()
 	}
-	v.Set("cursor", cursor)
-	return path + "?" + v.Encode()
+	var p pager
+	if q.Get("cursor") != "" {
+		p.Newest = link("")
+	}
+	if next != "" {
+		p.Older = link(next)
+	}
+	return p
 }

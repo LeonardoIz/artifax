@@ -86,7 +86,16 @@ jobs:
               -o "dist/artifax_${GITHUB_REF_NAME}_${os}_${arch}${ext}" ./cmd/artifax
           done
           cd dist && sha256sum * > checksums.txt
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[/ { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "No section for ${GITHUB_REF_NAME} in CHANGELOG.md"; exit 1; }
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
-          generate_release_notes: true
+          body_path: notes.md

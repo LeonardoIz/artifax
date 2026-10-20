@@ -10,7 +10,7 @@
 <section class="section" id="artifacts" aria-labelledby="artifacts-title">
   <div class="section-head">
     <h2 id="artifacts-title">Artifacts</h2>
-    <p class="muted small">{{.Data.Count}} total · {{bytes .Data.Bytes}}</p>
+    <p class="muted small">{{.Data.Count}} total - {{bytes .Data.Bytes}}</p>
   </div>
 
   <details class="panel">
@@ -53,7 +53,7 @@
       <tr>
         <td>
           <a href="/admin/docs/{{.ID}}">{{or .Title "Untitled"}}</a>
-          <div class="muted small"><span class="mono">{{.ID}}</span> · {{kind .ContentType}}</div>
+          <div class="muted small"><span class="mono">{{.ID}}</span> - {{kind .ContentType}}</div>
         </td>
         <td>
           <form method="post" action="/admin/docs/{{.ID}}">
@@ -81,7 +81,7 @@
   {{else}}
   <p class="empty">{{if or .Data.Query .Data.Visibility}}No artifacts match these filters.{{else}}No artifacts yet.{{end}}</p>
   {{end}}
-  {{with .Data.NextURL}}<p class="more"><a class="with-icon" href="{{.}}">Older{{template "icon-next"}}</a></p>{{end}}
+  {{template "pager" .Data.Pages}}
 </section>
 
 <section class="section" id="tokens" aria-labelledby="tokens-title">
@@ -135,9 +135,16 @@
           {{- else}}<span class="muted">never</span>{{end -}}
         </td>
         <td class="actions">
+          {{- if .Expired}}
+          <form method="post" action="/admin/tokens/{{.ID}}/revoke" data-confirm="Remove the expired token “{{.Name}}”?" data-confirm-label="Remove">
+            <input type="hidden" name="expired" value="1">
+            <button type="submit" class="link danger">Remove</button>
+          </form>
+          {{- else}}
           <form method="post" action="/admin/tokens/{{.ID}}/revoke" data-confirm="Revoke “{{.Name}}”? Agents using it will stop working." data-confirm-label="Revoke">
             <button type="submit" class="link danger">Revoke</button>
           </form>
+          {{- end}}
         </td>
       </tr>
     {{- end}}
