@@ -4,7 +4,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -15,8 +14,11 @@ import (
 // TokenPrefix starts every API token secret.
 const TokenPrefix = "ax_"
 
-// ErrInvalidToken is returned for unknown, revoked or malformed tokens.
+// ErrInvalidToken is returned for unknown, revoked, expired or malformed tokens.
 var ErrInvalidToken = errors.New("invalid token")
+
+// ErrTokenName is returned for a blank or overlong token name.
+var ErrTokenName = errors.New("token name must be 1-100 characters")
 
 // Tokens issues and verifies API tokens.
 type Tokens struct {
@@ -30,9 +32,11 @@ func NewTokens(st *store.Store) *Tokens {
 }
 
 // Create issues a new token and returns it together with its one-time secret.
-func (t *Tokens) Create(ctx context.Context, name string) (*store.Token, string, error) {
+// The token expires after ttl, or never when ttl is 0. A name already used by an
+// active token fails with store.ErrNameTaken.
+func (t *Tokens) Create(ctx context.Context, name string, ttl time.Duration) (*store.Token, string, error) {
 	secret := TokenPrefix + ids.Secret(32)
-	tok, err := t.insert(ctx, name, secret)
+	tok, err := t.insert(ctx, name, secret, ttl)
 	return tok, secret, err
 }
 
@@ -48,8 +52,11 @@ func (t *Tokens) Verify(ctx context.Context, secret string) (*store.Token, error
 	if err != nil {
 		return nil, err
 	}
-	// Throttle writes: one last-used update per minute is plenty.
 	now := t.now()
+	if tok.ExpiredAt(now) {
+		return nil, ErrInvalidToken
+	}
+	// Throttle writes: one last-used update per minute is plenty.
 	if tok.LastUsedAt == nil || now.Sub(*tok.LastUsedAt) > time.Minute {
 		if err := t.store.TouchToken(ctx, tok.ID, now); err != nil {
 			return nil, err
@@ -58,7 +65,7 @@ func (t *Tokens) Verify(ctx context.Context, secret string) (*store.Token, error
 	return tok, nil
 }
 
-// List returns active tokens.
+// List returns tokens that were not revoked, expired ones included.
 func (t *Tokens) List(ctx context.Context) ([]store.Token, error) {
 	return t.store.ActiveTokens(ctx)
 }
@@ -78,16 +85,16 @@ func (t *Tokens) SeedBootstrap(ctx context.Context, secret string) (bool, error)
 	if err != nil || n > 0 {
 		return false, err
 	}
-	if _, err := t.insert(ctx, "bootstrap", secret); err != nil {
+	if _, err := t.insert(ctx, "bootstrap", secret, 0); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (t *Tokens) insert(ctx context.Context, name, secret string) (*store.Token, error) {
+func (t *Tokens) insert(ctx context.Context, name, secret string, ttl time.Duration) (*store.Token, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || len(name) > 100 {
-		return nil, fmt.Errorf("token name must be 1-100 characters")
+		return nil, ErrTokenName
 	}
 	tok := &store.Token{
 		ID:         ids.New(16),
@@ -95,6 +102,10 @@ func (t *Tokens) insert(ctx context.Context, name, secret string) (*store.Token,
 		Prefix:     secret[:len(TokenPrefix)+6],
 		SecretHash: ids.Hash(secret),
 		CreatedAt:  t.now(),
+	}
+	if ttl > 0 {
+		exp := tok.CreatedAt.Add(ttl)
+		tok.ExpiresAt = &exp
 	}
 	if err := t.store.InsertToken(ctx, tok); err != nil {
 		return nil, err

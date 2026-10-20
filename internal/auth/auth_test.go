@@ -34,7 +34,7 @@ func TestTokens(t *testing.T) {
 	ctx := context.Background()
 	tokens := NewTokens(openStore(t))
 
-	tok, secret, err := tokens.Create(ctx, "agent")
+	tok, secret, err := tokens.Create(ctx, "agent", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,14 +44,51 @@ func TestTokens(t *testing.T) {
 	if _, err := tokens.Verify(ctx, secret+"x"); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("wrong secret = %v", err)
 	}
-	if _, _, err := tokens.Create(ctx, "  "); err == nil {
+	if _, _, err := tokens.Create(ctx, "  ", 0); err == nil {
 		t.Error("blank name accepted")
+	}
+	if _, _, err := tokens.Create(ctx, "Agent", 0); !errors.Is(err, store.ErrNameTaken) {
+		t.Errorf("duplicate name = %v", err)
 	}
 	if err := tokens.Revoke(ctx, tok.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := tokens.Verify(ctx, secret); !errors.Is(err, ErrInvalidToken) {
 		t.Errorf("revoked token = %v", err)
+	}
+	if _, _, err := tokens.Create(ctx, "agent", 0); err != nil {
+		t.Errorf("name of a revoked token not reusable: %v", err)
+	}
+}
+
+func TestTokenExpiry(t *testing.T) {
+	ctx := context.Background()
+	tokens := NewTokens(openStore(t))
+	now := time.Now()
+	tokens.now = func() time.Time { return now }
+
+	tok, secret, err := tokens.Create(ctx, "short", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok.ExpiresAt == nil || !tok.ExpiresAt.Equal(now.Add(time.Hour)) {
+		t.Fatalf("expires at = %v", tok.ExpiresAt)
+	}
+	if _, err := tokens.Verify(ctx, secret); err != nil {
+		t.Fatalf("fresh token rejected: %v", err)
+	}
+	now = now.Add(time.Hour)
+	if _, err := tokens.Verify(ctx, secret); !errors.Is(err, ErrInvalidToken) {
+		t.Errorf("expired token = %v", err)
+	}
+
+	never, secret, err := tokens.Create(ctx, "forever", 0)
+	if err != nil || never.ExpiresAt != nil {
+		t.Fatalf("no-expiry token = %v %v", never.ExpiresAt, err)
+	}
+	now = now.Add(10 * 365 * 24 * time.Hour)
+	if _, err := tokens.Verify(ctx, secret); err != nil {
+		t.Errorf("no-expiry token rejected: %v", err)
 	}
 }
 

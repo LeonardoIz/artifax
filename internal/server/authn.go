@@ -80,7 +80,7 @@ func (s *Server) beginOIDC(w http.ResponseWriter, r *http.Request, next string) 
 		s.render(w, http.StatusBadGateway, "message", s.page(nil, "Login unavailable", message{
 			Heading: "Login unavailable",
 			Text:    "The identity provider could not be reached. Try again in a moment.",
-			LinkURL: "/", LinkText: "Back to documents",
+			LinkURL: "/", LinkText: "Back to artifacts",
 		}))
 		return
 	}
@@ -133,7 +133,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		s.render(w, http.StatusForbidden, "message", s.page(nil, "No access", message{
 			Heading: "No access",
 			Text:    "Your account is not allowed to manage this Artifax instance.",
-			LinkURL: "/", LinkText: "Back to documents",
+			LinkURL: "/", LinkText: "Back to artifacts",
 		}))
 		return
 	}

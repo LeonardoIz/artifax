@@ -3,16 +3,6 @@
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const ease = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
-  // ---------- Page transitions ----------
-
-  // Shared-element transitions: elements with data-vt morph between pages (a
-  // document title in the list and on its detail page). This script is loaded
-  // without defer at the end of <body> so names exist before the first render.
-  for (const el of document.querySelectorAll("[data-vt]")) {
-    el.style.viewTransitionName = el.dataset.vt;
-    el.style.viewTransitionClass = "title";
-  }
-
   // ---------- Toasts ----------
 
   const toasts = document.querySelector(".toasts");
@@ -78,36 +68,41 @@
   });
 
   // ---------- Animated <details> ----------
+  // The whole <details> is animated between its closed height (summary only) and its
+  // open height. Animating the body instead stalls: its padding keeps it from
+  // reaching zero, so it stopped short and then snapped shut.
 
   for (const details of document.querySelectorAll("details.panel")) {
     const summary = details.querySelector(":scope > summary");
-    const body = details.querySelector(":scope > :not(summary)");
-    if (!summary || !body) continue;
+    if (!summary) continue;
     let anim = null;
+
+    const run = (from, to, duration, done) => {
+      details.style.overflow = "hidden";
+      anim = details.animate({ height: [`${from}px`, `${to}px`] }, { duration, easing: ease });
+      anim.onfinish = () => {
+        anim = null;
+        details.style.overflow = "";
+        done?.();
+      };
+    };
 
     summary.addEventListener("click", (event) => {
       if (reduceMotion.matches) return;
       event.preventDefault();
+      const from = details.getBoundingClientRect().height; // mid-animation too
       anim?.cancel();
+      const closed = summary.offsetHeight + details.offsetHeight - details.clientHeight; // + borders
       if (details.open && !details.classList.contains("closing")) {
         details.classList.add("closing");
-        anim = body.animate(
-          [{ height: `${body.offsetHeight}px`, opacity: 1, overflow: "hidden" },
-            { height: "0px", opacity: 0, overflow: "hidden" }],
-          { duration: 220, easing: ease },
-        );
-        anim.onfinish = () => {
+        run(from, closed, 220, () => {
           details.open = false;
           details.classList.remove("closing");
-        };
+        });
       } else {
         details.classList.remove("closing");
         details.open = true;
-        anim = body.animate(
-          [{ height: "0px", opacity: 0, overflow: "hidden" },
-            { height: `${body.offsetHeight}px`, opacity: 1, overflow: "hidden" }],
-          { duration: 280, easing: ease },
-        );
+        run(from, details.offsetHeight, 280);
       }
     });
   }
@@ -311,11 +306,12 @@
   // ---------- Local timestamps ----------
 
   const format = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+  const formatDay = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
   for (const el of document.querySelectorAll("time[datetime]")) {
     const date = new Date(el.dateTime);
     if (!Number.isNaN(date.getTime())) {
       el.title = el.dateTime;
-      el.textContent = format.format(date);
+      el.textContent = (el.hasAttribute("data-date-only") ? formatDay : format).format(date);
     }
   }
 })();

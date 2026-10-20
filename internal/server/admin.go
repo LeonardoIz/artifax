@@ -6,8 +6,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"github.com/LeonardoIz/artifax/internal/auth"
 	"github.com/LeonardoIz/artifax/internal/docs"
 	"github.com/LeonardoIz/artifax/internal/media"
 	"github.com/LeonardoIz/artifax/internal/store"
@@ -15,7 +17,8 @@ import (
 
 const adminActor = "admin"
 
-type adminDocsData struct {
+// adminData backs the admin page: artifacts and API tokens side by side.
+type adminData struct {
 	Docs       []store.Doc
 	Query      string
 	Visibility string
@@ -24,6 +27,27 @@ type adminDocsData struct {
 	Count      int
 	Bytes      int64
 	MaxMB      int64
+	Tokens     []store.Token
+	NewSecret  string
+	Expiries   []tokenExpiry
+	BaseURL    string
+}
+
+type tokenExpiry struct {
+	Value, Label string
+	TTL          time.Duration // 0: never
+	Default      bool
+}
+
+const day = 24 * time.Hour
+
+// tokenExpiries are the lifetimes offered when creating a token.
+var tokenExpiries = []tokenExpiry{
+	{Value: "7d", Label: "7 days", TTL: 7 * day},
+	{Value: "30d", Label: "30 days", TTL: 30 * day},
+	{Value: "90d", Label: "90 days", TTL: 90 * day, Default: true},
+	{Value: "1y", Label: "1 year", TTL: 365 * day},
+	{Value: "never", Label: "Never"},
 }
 
 type adminDocData struct {
@@ -34,20 +58,14 @@ type adminDocData struct {
 	TextMore bool   // the preview is truncated
 }
 
-type adminTokensData struct {
-	Tokens    []store.Token
-	NewSecret string
-	BaseURL   string
-}
-
-func (s *Server) adminPage(w http.ResponseWriter, r *http.Request, section, title string, data any) page {
+func (s *Server) adminPage(w http.ResponseWriter, r *http.Request, title string, data any) page {
 	p := s.page(sessionFrom(r.Context()), title, data)
-	p.Section = section
+	p.Section = "admin"
 	p.Flash, p.Error = s.takeFlash(w, r)
 	return p
 }
 
-func (s *Server) handleAdminDocs(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	p := store.ListParams{Query: q.Get("q"), Cursor: q.Get("cursor"), Limit: 50}
 	vis := store.Visibility(q.Get("visibility"))
@@ -70,7 +88,12 @@ func (s *Server) handleAdminDocs(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	s.render(w, http.StatusOK, "admin_docs", s.adminPage(w, r, "docs", "Panel", adminDocsData{
+	tokens, err := s.tokens.List(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	s.render(w, http.StatusOK, "admin", s.adminPage(w, r, "Admin", adminData{
 		Docs:       list,
 		Query:      p.Query,
 		Visibility: string(vis),
@@ -79,6 +102,10 @@ func (s *Server) handleAdminDocs(w http.ResponseWriter, r *http.Request) {
 		Count:      count,
 		Bytes:      size,
 		MaxMB:      s.docs.MaxBytes() >> 20,
+		Tokens:     tokens,
+		NewSecret:  s.takeNewToken(w, r),
+		Expiries:   tokenExpiries,
+		BaseURL:    s.cfg.URL(""),
 	}))
 }
 
@@ -88,7 +115,7 @@ func (s *Server) handleAdminUpload(w http.ResponseWriter, r *http.Request) {
 		blankToNil(&up.Fields)
 		var d *store.Doc
 		if d, err = s.docs.Create(r.Context(), up, adminActor); err == nil {
-			s.redirectFlash(w, r, "/admin/docs/"+d.ID, "msg", "Document uploaded.")
+			s.redirectFlash(w, r, "/admin/docs/"+d.ID, "msg", "Artifact uploaded.")
 			return
 		}
 	}
@@ -109,7 +136,7 @@ func (s *Server) handleAdminDoc(w http.ResponseWriter, r *http.Request) {
 	if title == "" {
 		title = d.ID
 	}
-	s.render(w, http.StatusOK, "admin_doc", s.adminPage(w, r, "docs", title, s.docPreview(d)))
+	s.render(w, http.StatusOK, "admin_doc", s.adminPage(w, r, title, s.docPreview(d)))
 }
 
 const previewBytes = 64 << 10
@@ -167,7 +194,7 @@ func (s *Server) handleAdminUpdate(w http.ResponseWriter, r *http.Request) {
 		case errors.As(err, &verr):
 			http.Error(w, upperFirst(verr.Msg)+".", http.StatusBadRequest)
 		case errors.Is(err, docs.ErrNotFound):
-			http.Error(w, "Document not found.", http.StatusNotFound)
+			http.Error(w, "Artifact not found.", http.StatusNotFound)
 		default:
 			s.serverError(w, r, err)
 		}
@@ -199,11 +226,12 @@ func (s *Server) handleAdminDelete(w http.ResponseWriter, r *http.Request) {
 		s.adminFail(w, r, "/admin", err)
 		return
 	}
-	s.redirectFlash(w, r, "/admin", "msg", "Document deleted.")
+	s.redirectFlash(w, r, "/admin", "msg", "Artifact deleted.")
 }
 
+// handleAdminTokens keeps old links working: tokens now live on the admin page.
 func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
-	s.renderTokens(w, r, "")
+	http.Redirect(w, r, "/admin#tokens", http.StatusMovedPermanently)
 }
 
 func (s *Server) handleAdminCreateToken(w http.ResponseWriter, r *http.Request) {
@@ -212,13 +240,59 @@ func (s *Server) handleAdminCreateToken(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	_, secret, err := s.tokens.Create(r.Context(), r.PostForm.Get("name"))
-	if err != nil {
-		s.redirectFlash(w, r, "/admin/tokens", "err", "Token name must be 1-100 characters.")
+	exp, ok := findExpiry(r.PostForm.Get("expires"))
+	if !ok {
+		s.redirectFlash(w, r, "/admin#tokens", "err", "Choose when the token expires.")
 		return
 	}
-	// Rendered directly (not redirected) so the secret never lands in a URL or history.
-	s.renderTokens(w, r, secret)
+	name := strings.TrimSpace(r.PostForm.Get("name"))
+	_, secret, err := s.tokens.Create(r.Context(), name, exp.TTL)
+	switch {
+	case errors.Is(err, auth.ErrTokenName):
+		s.redirectFlash(w, r, "/admin#tokens", "err", "Token name must be 1-100 characters.")
+	case errors.Is(err, store.ErrNameTaken):
+		s.redirectFlash(w, r, "/admin#tokens", "err", "A token named “"+name+"” already exists.")
+	case err != nil:
+		s.serverError(w, r, err)
+	default:
+		// Post/redirect/get, so reloading cannot create a second token. The secret
+		// rides in a short-lived cookie read once by the admin page, never in a URL.
+		http.SetCookie(w, &http.Cookie{
+			Name:     newTokenCookie,
+			Value:    secret,
+			Path:     "/admin",
+			MaxAge:   60,
+			HttpOnly: true,
+			Secure:   s.cfg.SecureCookies(),
+			SameSite: http.SameSiteStrictMode,
+		})
+		http.Redirect(w, r, "/admin#tokens", http.StatusSeeOther)
+	}
+}
+
+const newTokenCookie = "artifax_new_token"
+
+// takeNewToken returns and clears the secret of a token that was just created.
+func (s *Server) takeNewToken(w http.ResponseWriter, r *http.Request) string {
+	c, err := r.Cookie(newTokenCookie)
+	if err != nil {
+		return ""
+	}
+	http.SetCookie(w, &http.Cookie{Name: newTokenCookie, Path: "/admin", MaxAge: -1, HttpOnly: true,
+		Secure: s.cfg.SecureCookies(), SameSite: http.SameSiteStrictMode})
+	if !strings.HasPrefix(c.Value, auth.TokenPrefix) {
+		return ""
+	}
+	return c.Value
+}
+
+func findExpiry(value string) (tokenExpiry, bool) {
+	for _, e := range tokenExpiries {
+		if e.Value == value {
+			return e, true
+		}
+	}
+	return tokenExpiry{}, false
 }
 
 func (s *Server) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request) {
@@ -226,20 +300,7 @@ func (s *Server) handleAdminRevokeToken(w http.ResponseWriter, r *http.Request) 
 		s.serverError(w, r, err)
 		return
 	}
-	s.redirectFlash(w, r, "/admin/tokens", "msg", "Token revoked.")
-}
-
-func (s *Server) renderTokens(w http.ResponseWriter, r *http.Request, secret string) {
-	list, err := s.tokens.List(r.Context())
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	s.render(w, http.StatusOK, "admin_tokens", s.adminPage(w, r, "tokens", "Tokens", adminTokensData{
-		Tokens:    list,
-		NewSecret: secret,
-		BaseURL:   s.cfg.URL(""),
-	}))
+	s.redirectFlash(w, r, "/admin#tokens", "msg", "Token revoked.")
 }
 
 // adminFail redirects back with a readable error, or fails hard for unexpected errors.
@@ -251,7 +312,7 @@ func (s *Server) adminFail(w http.ResponseWriter, r *http.Request, back string, 
 	case errors.Is(err, docs.ErrTooLarge):
 		s.redirectFlash(w, r, back, "err", "The file is larger than the upload limit.")
 	case errors.Is(err, docs.ErrNotFound):
-		s.redirectFlash(w, r, "/admin", "err", "Document not found.")
+		s.redirectFlash(w, r, "/admin", "err", "Artifact not found.")
 	default:
 		s.serverError(w, r, err)
 	}

@@ -1,6 +1,6 @@
 {{define "content"}}
 <div class="head">
-  <h1 data-vt="page-title">Artifacts</h1>
+  <h1>Artifacts</h1>
   <form class="search" method="get" action="/">
     <input type="search" name="q" value="{{.Data.Query}}" placeholder="Search" aria-label="Search artifacts">
   </form>
@@ -22,5 +22,5 @@
 {{else}}
 <p class="empty">{{if .Data.Query}}No artifacts match “{{.Data.Query}}”.{{else}}Nothing published yet.{{end}}</p>
 {{end}}
-{{with .Data.NextURL}}<p class="more"><a href="{{.}}">Older →</a></p>{{end}}
+{{with .Data.NextURL}}<p class="more"><a class="with-icon" href="{{.}}">Older{{template "icon-next"}}</a></p>{{end}}
 {{end}}

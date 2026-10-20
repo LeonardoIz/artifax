@@ -5,7 +5,7 @@ Self-hosted sharing for artifacts: HTML pages, images, PDFs, logs, any file. Age
 - One Go binary and one data directory (SQLite plus files on disk).
 - Each upload gets a random id at `/d/<id>`. Uploading again to that id replaces it and keeps the link.
 - Visibility: `public` (listed on the home page), `unlisted` (anyone with the link) or `private` (admin only).
-- Admin panel for artifacts and API tokens. Login with any OIDC provider or a single email/password.
+- One admin page for artifacts and API tokens. Login with any OIDC provider or a single email/password.
 
 ## Run
 
@@ -46,7 +46,7 @@ Artifax itself must be able to reach `OIDC_ISSUER`, not only the browser. No pro
 
 ## API
 
-Every request needs `Authorization: Bearer ax_…`. Create tokens in the panel.
+Every request needs `Authorization: Bearer ax_…`. Create tokens under Admin → API tokens. Each has a unique name and expires after 7, 30 or 90 days, a year, or never; the bootstrap token never expires.
 
 ```bash
 curl -X POST "$ARTIFAX_URL/api/docs" -H "Authorization: Bearer $ARTIFAX_TOKEN" \

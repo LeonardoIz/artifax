@@ -102,4 +102,4 @@ curl -sS -X DELETE "$ARTIFAX_URL/api/docs/$ID" -H "Authorization: Bearer $ARTIFA
 
 ## 4. Report
 
-The response JSON has `id`, `url`, `kind` (`html`, `image`, `svg`, `pdf`, `video`, `audio`, `text`, `binary`) and `contentType`. Give the user the `url` and remember the `id` for later updates. If `kind` is not what you expected, fix the file name or extension and replace. Errors come back as `application/problem+json` with a `detail` field. Fix the cause and retry once.
+The response JSON has `id`, `url`, `kind` (`html`, `image`, `svg`, `pdf`, `video`, `audio`, `text`, `binary`) and `contentType`. Give the user the `url` and remember the `id` for later updates. If `kind` is not what you expected, fix the file name or extension and replace. Errors come back as `application/problem+json` with a `detail` field. Fix the cause and retry once. A `401` means the token is missing, revoked or expired: tell the user to create a new one under Admin → API tokens instead of retrying.

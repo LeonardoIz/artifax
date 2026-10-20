@@ -33,6 +33,7 @@ type env struct {
 	t       *testing.T
 	handler http.Handler
 	token   string
+	tokens  *auth.Tokens
 	session *http.Cookie
 }
 
@@ -66,7 +67,7 @@ func newEnv(t *testing.T, mutate func(*config.Config)) *env {
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	tokens := auth.NewTokens(st)
-	_, secret, err := tokens.Create(ctx, "test-agent")
+	_, secret, err := tokens.Create(ctx, "test-agent", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +83,7 @@ func newEnv(t *testing.T, mutate func(*config.Config)) *env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &env{t: t, handler: srv.Handler(), token: secret}
+	return &env{t: t, handler: srv.Handler(), token: secret, tokens: tokens}
 }
 
 func (e *env) do(r *http.Request) *httptest.ResponseRecorder {
@@ -571,12 +572,56 @@ func TestAdminPanel(t *testing.T) {
 		t.Errorf("raw download disposition = %q", raw.Header().Get("Content-Disposition"))
 	}
 
-	form = url.Values{"name": {"laptop"}}
+	// Creating a token redirects (so a reload cannot create another) and the next
+	// admin page shows the secret exactly once.
+	createToken := func(name string) *httptest.ResponseRecorder {
+		form := url.Values{"name": {name}, "expires": {"30d"}}
+		r := httptest.NewRequest("POST", "/admin/tokens", strings.NewReader(form.Encode()))
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return e.do(r)
+	}
+	rec = createToken("laptop")
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/admin#tokens" || strings.Contains(rec.Header().Get("Location"), auth.TokenPrefix) {
+		t.Fatalf("create token: %d %s", rec.Code, rec.Header().Get("Location"))
+	}
+	var secretCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "artifax_new_token" {
+			secretCookie = c
+		}
+	}
+	if secretCookie == nil || !secretCookie.HttpOnly {
+		t.Fatalf("new token cookie = %+v", secretCookie)
+	}
+	r = get("/admin")
+	r.AddCookie(secretCookie)
+	shown := e.do(r)
+	if !strings.Contains(shown.Body.String(), secretCookie.Value) {
+		t.Error("admin page does not show the new token")
+	}
+	if c := shown.Result().Cookies(); len(c) == 0 || c[0].Name != "artifax_new_token" || c[0].MaxAge >= 0 {
+		t.Error("new token cookie not cleared after showing it")
+	}
+	if rec := createToken("LAPTOP"); rec.Code != http.StatusSeeOther {
+		t.Fatalf("duplicate token: %d", rec.Code)
+	}
+	if list, _ := e.tokens.List(context.Background()); len(list) != 2 { // test-agent + laptop
+		t.Errorf("tokens after duplicate = %d, want 2", len(list))
+	}
+	form = url.Values{"name": {"x"}, "expires": {"forever"}}
 	r = httptest.NewRequest("POST", "/admin/tokens", strings.NewReader(form.Encode()))
 	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	rec = e.do(r)
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), auth.TokenPrefix) {
-		t.Fatalf("create token: %d", rec.Code)
+	if rec := e.do(r); rec.Code != http.StatusSeeOther {
+		t.Fatalf("bad expiry: %d", rec.Code)
+	}
+
+	// Artifacts and tokens share one admin page; the old tokens URL points there.
+	admin := e.do(get("/admin")).Body.String()
+	if !strings.Contains(admin, "Panel upload") || !strings.Contains(admin, "laptop") {
+		t.Errorf("admin page misses artifacts or tokens")
+	}
+	if rec := e.do(get("/admin/tokens")); rec.Code != http.StatusMovedPermanently || rec.Header().Get("Location") != "/admin#tokens" {
+		t.Errorf("old tokens page: %d %s", rec.Code, rec.Header().Get("Location"))
 	}
 
 	if rec := e.do(httptest.NewRequest("POST", "/admin/docs/"+id+"/delete", nil)); rec.Code != http.StatusSeeOther {

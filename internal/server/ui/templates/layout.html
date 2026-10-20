@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{with .Title}}{{.}} · {{end}}artifax</title>
+<title>{{with .Title}}{{.}} · {{end}}Artifax</title>
 <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
 <link rel="stylesheet" href="{{asset "style.css"}}">
+<script src="{{asset "app.js"}}" defer></script>
 </head>
 <body>
 <header class="bar">
   <div class="wrap bar-inner">
-    <a class="brand" href="/"><img src="{{asset "favicon.svg"}}" alt="" width="20" height="20">artifax</a>
+    <a class="brand" href="/">{{template "logo"}}Artifax</a>
     <nav>
     {{- if .Admin}}
-      <a href="/admin"{{if eq .Section "docs"}} aria-current="page"{{end}}>Panel</a>
-      <a href="/admin/tokens"{{if eq .Section "tokens"}} aria-current="page"{{end}}>Tokens</a>
+      <a href="/admin"{{if eq .Section "admin"}} aria-current="page"{{end}}>Admin</a>
       <form method="post" action="/auth/logout"><button type="submit" class="link">Log out</button></form>
     {{- else if .AuthEnabled}}
       <a href="/auth/login">Log in</a>
@@ -27,7 +27,7 @@
 </main>
 <footer class="foot">
   <div class="wrap foot-inner">
-    <span>artifax {{.Version}}</span>
+    <span>Artifax {{.Version}}</span>
     <a href="/skill">Agent skill</a>
   </div>
 </footer>
@@ -46,9 +46,16 @@
     </div>
   </form>
 </dialog>
-
-{{/* Not deferred: it must name view-transition elements before the first render. */}}
-<script src="{{asset "app.js"}}"></script>
 </body>
 </html>
 {{end}}
+
+{{/* Logo: an upload arrow. Same drawing as favicon.svg, but themed and animatable. */}}
+{{define "logo"}}<svg class="logo" viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><rect width="32" height="32" rx="7"/><path d="M16 23.5V9M10 14.5l6-6 6 6"/></svg>{{end}}
+
+{{/* Inline icons, 16px, drawn with currentColor. */}}
+{{define "icon-back"}}<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8H3M7.5 3.5 3 8l4.5 4.5"/></svg>{{end}}
+{{define "icon-next"}}<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10M8.5 3.5 13 8l-4.5 4.5"/></svg>{{end}}
+{{define "icon-external"}}<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 11 11 5M6 4.5h5.5V10"/></svg>{{end}}
+{{define "icon-download"}}<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>{{end}}
+{{define "icon-copy"}}<svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>{{end}}

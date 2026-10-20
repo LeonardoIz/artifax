@@ -17,34 +17,59 @@ type Token struct {
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	RevokedAt  *time.Time
+	ExpiresAt  *time.Time // nil: never expires
 }
 
-const tokenColumns = `id, name, prefix, secret_hash, created_at, last_used_at, revoked_at`
+// ErrNameTaken is returned when an active token already has the name.
+var ErrNameTaken = errors.New("name taken")
+
+// ExpiredAt reports whether the token has expired by now.
+func (t *Token) ExpiredAt(now time.Time) bool {
+	return t.ExpiresAt != nil && !now.Before(*t.ExpiresAt)
+}
+
+// Expired reports whether the token has expired. For templates.
+func (t *Token) Expired() bool { return t.ExpiredAt(time.Now()) }
+
+const tokenColumns = `id, name, prefix, secret_hash, created_at, last_used_at, revoked_at, expires_at`
 
 func scanToken(row interface{ Scan(...any) error }) (*Token, error) {
 	var t Token
 	var created int64
-	var used, revoked sql.NullInt64
-	if err := row.Scan(&t.ID, &t.Name, &t.Prefix, &t.SecretHash, &created, &used, &revoked); err != nil {
+	var used, revoked, expires sql.NullInt64
+	if err := row.Scan(&t.ID, &t.Name, &t.Prefix, &t.SecretHash, &created, &used, &revoked, &expires); err != nil {
 		return nil, err
 	}
 	t.CreatedAt = fromMillis(created)
 	t.LastUsedAt = nullMillis(used)
 	t.RevokedAt = nullMillis(revoked)
+	t.ExpiresAt = nullMillis(expires)
 	return &t, nil
 }
 
-// InsertToken stores a new token.
+// InsertToken stores a new token. Active names are unique, ignoring case.
 func (s *Store) InsertToken(ctx context.Context, t *Token) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO tokens (id, name, prefix, secret_hash, created_at)
-		VALUES (?, ?, ?, ?, ?)`, t.ID, t.Name, t.Prefix, t.SecretHash, toMillis(t.CreatedAt))
+	var taken bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM tokens
+		WHERE name = ? COLLATE NOCASE AND revoked_at IS NULL)`, t.Name).Scan(&taken); err != nil {
+		return fmt.Errorf("insert token: %w", err)
+	}
+	if taken {
+		return ErrNameTaken
+	}
+	var expires sql.NullInt64
+	if t.ExpiresAt != nil {
+		expires = sql.NullInt64{Int64: toMillis(*t.ExpiresAt), Valid: true}
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO tokens (id, name, prefix, secret_hash, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?)`, t.ID, t.Name, t.Prefix, t.SecretHash, toMillis(t.CreatedAt), expires)
 	if err != nil {
 		return fmt.Errorf("insert token: %w", err)
 	}
 	return nil
 }
 
-// ActiveTokens returns non-revoked tokens, newest first.
+// ActiveTokens returns non-revoked tokens, expired ones included, newest first.
 func (s *Store) ActiveTokens(ctx context.Context) ([]Token, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+tokenColumns+` FROM tokens
 		WHERE revoked_at IS NULL ORDER BY created_at DESC`)

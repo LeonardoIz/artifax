@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="narrow">
-  <h1 data-vt="page-title">{{.Data.Heading}}</h1>
+  <h1>{{.Data.Heading}}</h1>
   <p class="muted">{{.Data.Text}}</p>
-  <p><a href="{{or .Data.LinkURL "/"}}">{{or .Data.LinkText "Back to documents"}}</a></p>
+  <p><a href="{{or .Data.LinkURL "/"}}">{{or .Data.LinkText "Back to artifacts"}}</a></p>
 </div>
 {{end}}

@@ -1,12 +1,12 @@
 {{define "content"}}
 <div class="head">
   <div>
-    <h1 data-vt="page-title">Agent skill</h1>
+    <h1>Agent skill</h1>
     <p class="muted">Teaches Claude Code and other agents to write and publish pages here.</p>
   </div>
   <div class="row">
-    <button type="button" class="secondary" data-copy-target="skill-md">Copy</button>
-    <a class="button" href="/skill.md?download">Download</a>
+    <button type="button" class="secondary" data-copy-target="skill-md">{{template "icon-copy"}}Copy</button>
+    <a class="button" href="/skill.md?download">{{template "icon-download"}}Download</a>
   </div>
 </div>
 
@@ -16,7 +16,7 @@
 curl -fsSL {{.Data.BaseURL}}/skill.md -o ~/.claude/skills/artifax/SKILL.md
 
 export ARTIFAX_URL={{.Data.BaseURL}}
-export ARTIFAX_TOKEN=ax_...   # create one in Panel → Tokens</code></pre>
+export ARTIFAX_TOKEN=ax_...   # create one in Admin → API tokens</code></pre>
   <p class="hint">Agents can also read it directly: <code>curl {{.Data.BaseURL}}/skill</code> returns Markdown.</p>
 </section>
 

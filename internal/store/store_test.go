@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -134,4 +135,45 @@ func ids(docs []Doc) []string {
 		out[i] = d.ID
 	}
 	return out
+}
+
+// Migration 003 makes active token names unique; existing duplicates are renamed.
+func TestTokenNameMigration(t *testing.T) {
+	ctx := context.Background()
+	file := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", "file:"+file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"001_init.sql", "002_content_type.sql"} {
+		body, _ := migrations.ReadFile("migrations/" + name)
+		if _, err := db.ExecContext(ctx, string(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = db.ExecContext(ctx, `PRAGMA user_version = 2;
+		INSERT INTO tokens (id, name, prefix, secret_hash, created_at, revoked_at) VALUES
+		('aaaaaa1', 'laptop', 'ax_1', 'h1', 1, NULL),
+		('bbbbbb2', 'Laptop', 'ax_2', 'h2', 2, NULL),
+		('cccccc3', 'laptop', 'ax_3', 'h3', 3, 10)`)
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := Open(ctx, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got := map[string]string{}
+	for _, id := range []string{"aaaaaa1", "bbbbbb2", "cccccc3"} {
+		var name string
+		s.db.QueryRowContext(ctx, `SELECT name FROM tokens WHERE id = ?`, id).Scan(&name)
+		got[id] = name
+	}
+	want := map[string]string{"aaaaaa1": "laptop", "bbbbbb2": "Laptop (bbbbbb)", "cccccc3": "laptop"}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
 }

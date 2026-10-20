@@ -87,8 +87,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /auth/callback", s.handleCallback)
 	mux.HandleFunc("POST /auth/logout", s.handleLogout)
 
-	// Admin panel.
-	mux.Handle("GET /admin", s.admin(s.handleAdminDocs))
+	// Admin.
+	mux.Handle("GET /admin", s.admin(s.handleAdmin))
 	mux.Handle("POST /admin/docs", s.admin(s.handleAdminUpload))
 	mux.Handle("GET /admin/docs/{id}", s.admin(s.handleAdminDoc))
 	mux.Handle("POST /admin/docs/{id}", s.admin(s.handleAdminUpdate))
